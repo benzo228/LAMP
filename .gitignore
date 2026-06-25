@@ -1,0 +1,15 @@
+# Ansible retry files
+*.retry
+
+# Logs
+*.log
+
+# Encrypted vault files (if you don't store them in repo)
+inventory/*/group_vars/*/vault.yml
+inventory/*/host_vars/*/vault.yml
+
+# Temporary files from editors
+*.swp
+*.swo
+*~
+.DS_Store
