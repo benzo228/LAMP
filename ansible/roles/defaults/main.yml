@@ -1,24 +1,21 @@
 ---
-# --- Настройки базы данных (пароли задаются вне роли) ---
-mysql_root_password: ""        # Обязательно переопределить!
-mysql_app_password: ""         # Обязательно переопределить!
+# Пароли задаются вне роли
+mysql_root_password: ""
+mysql_app_password: ""
 db_name: "todo_app"
 db_user: "todo_user"
 db_host: "localhost"
 
-# --- Пути к веб-файлам ---
 web_root: "/var/www/html"
 app_dir: "todo"
 
-# --- Системные расширения PHP (минимальный набор) ---
 php_extensions:
   - php
   - libapache2-mod-php
   - php-mysql
   - php-mbstring
-  - php-zip          # нужен для Composer
+  - php-zip
 
-# --- Инструменты для установки Composer ---
 composer_required_packages:
   - git
   - curl
@@ -26,9 +23,7 @@ composer_required_packages:
 
 composer_version: "2.7.2"
 
-# --- Зависимости Composer (пакет:версия) ---
 composer_dependencies:
   - "monolog/monolog:^3.0"
 
-# --- Настройки виртуального хоста Apache ---
 server_name: "localhost"   # можно переопределить в group_vars (например, todo.example.com)
