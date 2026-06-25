@@ -1,0 +1,29 @@
+---
+# Пароли задаются вне роли
+mysql_root_password: ""
+mysql_app_password: ""
+db_name: "todo_app"
+db_user: "todo_user"
+db_host: "localhost"
+
+web_root: "/var/www/html"
+app_dir: "todo"
+
+php_extensions:
+  - php
+  - libapache2-mod-php
+  - php-mysql
+  - php-mbstring
+  - php-zip
+
+composer_required_packages:
+  - git
+  - curl
+  - unzip
+
+composer_version: "2.7.2"
+
+composer_dependencies:
+  - "monolog/monolog:^3.0"
+
+server_name: "localhost"   # можно переопределить в group_vars (например, todo.example.com)

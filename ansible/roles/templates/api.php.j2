@@ -1,0 +1,124 @@
+<?php
+// api.php
+header('Content-Type: application/json');
+
+// Подключаем автозагрузку Composer
+require_once __DIR__ . '/vendor/autoload.php';
+
+use Monolog\Logger;
+use Monolog\Handler\StreamHandler;
+
+// Настройка логгера (ошибки пишем в /var/log/todo-api.log)
+$log = new Logger('todo-api');
+$log->pushHandler(new StreamHandler('/var/log/todo-api.log', Logger::ERROR));
+
+$host = '{{ db_host }}';
+$dbname = '{{ db_name }}';
+$user = '{{ db_user }}';
+$pass = '{{ mysql_app_password }}';
+
+try {
+    $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $user, $pass);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+} catch (PDOException $e) {
+    $log->error('DB connection failed: ' . $e->getMessage());
+    http_response_code(500);
+    echo json_encode(['error' => 'Database connection failed']);
+    exit;
+}
+
+$method = $_SERVER['REQUEST_METHOD'];
+$request = explode('/', trim($_SERVER['PATH_INFO'] ?? '', '/'));
+
+switch ($method) {
+    case 'GET':
+        $stmt = $pdo->query("SELECT * FROM tasks ORDER BY created_at DESC");
+        $tasks = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        echo json_encode($tasks);
+        break;
+
+    case 'POST':
+        $data = json_decode(file_get_contents('php://input'), true);
+        if (!isset($data['title']) || trim($data['title']) === '') {
+            http_response_code(400);
+            echo json_encode(['error' => 'Title is required']);
+            exit;
+        }
+        try {
+            $stmt = $pdo->prepare("INSERT INTO tasks (title, description, status) VALUES (?, ?, ?)");
+            $stmt->execute([
+                trim($data['title']),
+                $data['description'] ?? '',
+                $data['status'] ?? 'new'
+            ]);
+            $id = $pdo->lastInsertId();
+            echo json_encode(['id' => $id, 'message' => 'Task created']);
+        } catch (PDOException $e) {
+            $log->error('Insert failed: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['error' => 'Internal server error']);
+        }
+        break;
+
+    case 'PUT':
+        $id = $request[0] ?? null;
+        if (!$id) {
+            http_response_code(400);
+            echo json_encode(['error' => 'ID required']);
+            exit;
+        }
+        $data = json_decode(file_get_contents('php://input'), true);
+        $fields = [];
+        $params = [];
+        if (isset($data['status'])) {
+            $fields[] = "status = ?";
+            $params[] = $data['status'];
+        }
+        if (isset($data['title'])) {
+            $fields[] = "title = ?";
+            $params[] = trim($data['title']);
+        }
+        if (isset($data['description'])) {
+            $fields[] = "description = ?";
+            $params[] = $data['description'];
+        }
+        if (empty($fields)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'No fields to update']);
+            exit;
+        }
+        $params[] = $id;
+        try {
+            $sql = "UPDATE tasks SET " . implode(', ', $fields) . " WHERE id = ?";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute($params);
+            echo json_encode(['message' => 'Task updated']);
+        } catch (PDOException $e) {
+            $log->error('Update failed: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['error' => 'Internal server error']);
+        }
+        break;
+
+    case 'DELETE':
+        $id = $request[0] ?? null;
+        if (!$id) {
+            http_response_code(400);
+            echo json_encode(['error' => 'ID required']);
+            exit;
+        }
+        try {
+            $stmt = $pdo->prepare("DELETE FROM tasks WHERE id = ?");
+            $stmt->execute([$id]);
+            echo json_encode(['message' => 'Task deleted']);
+        } catch (PDOException $e) {
+            $log->error('Delete failed: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['error' => 'Internal server error']);
+        }
+        break;
+
+    default:
+        http_response_code(405);
+        echo json_encode(['error' => 'Method not allowed']);
+}

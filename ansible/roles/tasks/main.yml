@@ -1,0 +1,187 @@
+---
+- name: Проверить, что пароли MySQL заданы
+  fail:
+    msg: "mysql_root_password или mysql_app_password не определены! Задайте их в group_vars/host_vars или через --extra-vars"
+  when: mysql_root_password == "" or mysql_app_password == ""
+
+- name: Обновить кэш пакетов APT
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+  tags: always
+
+- name: Установить системные пакеты (Apache, MySQL, расширения PHP, инструменты Composer)
+  apt:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ php_extensions + composer_required_packages }}"
+  tags: packages
+
+- name: Запустить и включить Apache и MySQL
+  service:
+    name: "{{ item }}"
+    state: started
+    enabled: yes
+  loop:
+    - apache2
+    - mysql
+  tags: services
+
+# --- Настройка виртуального хоста Apache ---
+- name: Создать конфигурацию виртуального хоста для приложения
+  template:
+    src: todo.conf.j2
+    dest: /etc/apache2/sites-available/todo.conf
+    owner: root
+    group: root
+    mode: 0644
+  notify: restart apache
+  tags: apache
+
+- name: Включить виртуальный хост todo
+  command: a2ensite todo.conf
+  args:
+    creates: /etc/apache2/sites-enabled/todo.conf
+  notify: restart apache
+  tags: apache
+
+- name: Отключить стандартный сайт по умолчанию (если не нужен)
+  command: a2dissite 000-default.conf
+  when: disable_default_site | default(true) | bool
+  notify: restart apache
+  tags: apache
+
+- name: Включить модуль rewrite (для красивых URL)
+  command: a2enmod rewrite
+  args:
+    creates: /etc/apache2/mods-enabled/rewrite.load
+  notify: restart apache
+  tags: apache
+
+# --- Настройка MySQL ---
+- name: Установить пароль root для MySQL (если ещё не установлен)
+  mysql_user:
+    name: root
+    password: "{{ mysql_root_password }}"
+    host: localhost
+    login_user: root
+    login_password: ""
+  ignore_errors: yes
+  tags: mysql
+
+- name: Создать базу данных приложения
+  mysql_db:
+    name: "{{ db_name }}"
+    state: present
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+  tags: mysql
+
+- name: Создать пользователя БД для приложения
+  mysql_user:
+    name: "{{ db_user }}"
+    password: "{{ mysql_app_password }}"
+    host: "{{ db_host }}"
+    priv: "{{ db_name }}.*:ALL"
+    state: present
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+  tags: mysql
+
+- name: Создать таблицу tasks
+  shell: |
+    mysql -u root -p{{ mysql_root_password }} {{ db_name }} -e "
+    CREATE TABLE IF NOT EXISTS tasks (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        description TEXT,
+        status ENUM('new','in_progress','done') DEFAULT 'new',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );"
+  no_log: true
+  tags: mysql
+
+# --- Размещение файлов приложения ---
+- name: Создать веб-директорию приложения
+  file:
+    path: "{{ web_root }}/{{ app_dir }}"
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: 0755
+  tags: web
+
+- name: Скопировать статические файлы фронтенда
+  copy:
+    src: "{{ item.src }}"
+    dest: "{{ web_root }}/{{ app_dir }}/{{ item.dest }}"
+    owner: www-data
+    group: www-data
+    mode: 0644
+  loop:
+    - { src: index.php, dest: index.php }
+    - { src: style.css, dest: style.css }
+    - { src: script.js, dest: script.js }
+  tags: web
+
+# --- Composer ---
+- name: Скачать установщик Composer
+  get_url:
+    url: "https://getcomposer.org/installer"
+    dest: "/tmp/composer-setup.php"
+    mode: 0644
+  tags: composer
+
+- name: Установить Composer глобально
+  shell: |
+    php /tmp/composer-setup.php --version={{ composer_version }} --install-dir=/usr/local/bin --filename=composer
+  args:
+    creates: /usr/local/bin/composer
+  tags: composer
+
+- name: Удалить установщик Composer
+  file:
+    path: /tmp/composer-setup.php
+    state: absent
+  tags: composer
+
+- name: Создать composer.json из шаблона
+  template:
+    src: composer.json.j2
+    dest: "{{ web_root }}/{{ app_dir }}/composer.json"
+    owner: www-data
+    group: www-data
+    mode: 0644
+  tags: composer
+
+- name: Выполнить composer install (установить зависимости)
+  shell: |
+    cd {{ web_root }}/{{ app_dir }} && /usr/local/bin/composer install --no-dev --no-interaction --no-progress
+  args:
+    creates: "{{ web_root }}/{{ app_dir }}/vendor/autoload.php"
+  register: composer_result
+  changed_when: "'Nothing to install' not in composer_result.stdout"
+  tags: composer
+
+- name: Назначить правильные права на директорию vendor
+  file:
+    path: "{{ web_root }}/{{ app_dir }}/vendor"
+    owner: www-data
+    group: www-data
+    recurse: yes
+  when: composer_result.changed or not (composer_result.skipped is defined)
+  tags: composer
+
+- name: Разместить api.php из шаблона
+  template:
+    src: api.php.j2
+    dest: "{{ web_root }}/{{ app_dir }}/api.php"
+    owner: www-data
+    group: www-data
+    mode: 0644
+  notify: restart apache
+  tags: web
+
+- name: Перезапустить Apache (если требуется)
+  meta: flush_handlers
+  tags: always
