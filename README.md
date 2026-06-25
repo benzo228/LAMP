@@ -1,1 +1,1 @@
-# LAMP
+The project contains an ansible role for deploying a LAMP stack

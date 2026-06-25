@@ -1,0 +1,16 @@
+{
+    "name": "todo-app/lamp",
+    "description": "Simple Todo application with LAMP",
+    "type": "project",
+    "require": {
+        {% for dep in composer_dependencies %}
+        "{{ dep.split(':')[0] }}": "{{ dep.split(':')[1] }}"{% if not loop.last %},{% endif %}
+        {% endfor %}
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "preferred-install": "dist",
+        "sort-packages": true
+    },
+    "minimum-stability": "stable"
+}

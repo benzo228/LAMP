@@ -1,0 +1,19 @@
+---
+galaxy_info:
+  author: "benzo228"
+  description: "Разворачивает LAMP-стек и простое To-Do приложение с управлением зависимостями через Composer"
+  license: MIT
+  min_ansible_version: 2.9
+  platforms:
+    - name: Ubuntu
+      versions:
+        - jammy   # 22.04
+        - focal   # 20.04
+  galaxy_tags:
+    - lamp
+    - php
+    - mysql
+    - apache
+    - composer
+    - todo
+dependencies: []

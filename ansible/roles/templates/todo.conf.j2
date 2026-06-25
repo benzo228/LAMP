@@ -1,0 +1,14 @@
+<VirtualHost *:80>
+    ServerAdmin webmaster@localhost
+    ServerName {{ server_name | default('localhost') }}
+    DocumentRoot {{ web_root }}/{{ app_dir }}
+
+    <Directory {{ web_root }}/{{ app_dir }}>
+        Options -Indexes +FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
+
+    ErrorLog ${APACHE_LOG_DIR}/todo_error.log
+    CustomLog ${APACHE_LOG_DIR}/todo_access.log combined
+</VirtualHost>

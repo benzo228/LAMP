@@ -1,0 +1,8 @@
+---
+- name: Развернуть LAMP с To-Do приложением
+  hosts: all
+  become: yes
+  roles:
+    - lamp-todo-app
+
+#ansible-playbook -i inventory/production deploy.yml --ask-vault-pass
